@@ -12,6 +12,14 @@ import sqlite3
 from datetime import datetime
 from functools import wraps
 
+# حل مشكلة imghdr في Python 3.13
+try:
+    import imghdr
+except ImportError:
+    # بديل لـ imghdr في Python 3.13+
+    import magic
+    imghdr = None
+
 from telegram import (Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup,
                       InlineQueryResultArticle, InputTextMessageContent,
                       InlineQueryResultCachedPhoto, InlineQueryResultCachedDocument)
