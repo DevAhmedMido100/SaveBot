@@ -12,14 +12,6 @@ import sqlite3
 from datetime import datetime
 from functools import wraps
 
-# حل مشكلة imghdr في Python 3.13
-try:
-    import imghdr
-except ImportError:
-    # بديل لـ imghdr في Python 3.13+
-    import magic
-    imghdr = None
-
 from telegram import (Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup,
                       InlineQueryResultArticle, InputTextMessageContent,
                       InlineQueryResultCachedPhoto, InlineQueryResultCachedDocument)
@@ -28,7 +20,8 @@ from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters,
 
 # ------- CONFIG -------
 REQUIRED_CHANNELS = ["@Tepthon", "@TepthonHelp"]
-DB_PATH = os.environ.get("DB_PATH", "saves.db")
+# استخدام مسار مطلق للداتابيز علشان Render
+DB_PATH = os.path.join(os.getcwd(), "saves.db")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 if not BOT_TOKEN:
