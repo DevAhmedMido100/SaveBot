@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: telegram-save-bot
+    env: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        # value: ضع قيمة التوكن في واجهة Render كـ secret
