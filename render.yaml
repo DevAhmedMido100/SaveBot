@@ -10,5 +10,3 @@ services:
     envVars:
       - key: BOT_TOKEN
         value: "8537062188:AAGMgeNReiVf5yAniXrzJFwbTtTWOv71NaY"
-      - key: DB_PATH
-        value: "saves.db"
