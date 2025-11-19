@@ -8,4 +8,4 @@ services:
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        # value: ضع قيمة التوكن في واجهة Render كـ secret
+        value: ""
