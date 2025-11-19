@@ -4,7 +4,7 @@
 بوت تلغرام لحفظ المحتوى (دعم حفظ ملفات/صور/نصوص) + تحقق اشتراك إجباري بقناتين
 مطلوب: تعيين المتغير البيئي BOT_TOKEN فقط على Render لتشغيل البوت.
 
-مكتوب باستخدام python-telegram-bot v13 (synchronous). قاعدة بيانات sqlite محلية.
+مكتوب باستخدام python-telegram-bot v20.7 (asynchronous). قاعدة بيانات sqlite محلية.
 """
 import os
 import logging
@@ -15,8 +15,9 @@ from functools import wraps
 from telegram import (Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup,
                       InlineQueryResultArticle, InputTextMessageContent,
                       InlineQueryResultCachedPhoto, InlineQueryResultCachedDocument)
-from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters,
-                          InlineQueryHandler, CallbackContext, CallbackQueryHandler)
+from telegram.ext import (Application, CommandHandler, MessageHandler, filters,
+                          InlineQueryHandler, ContextTypes, CallbackQueryHandler)
+from telegram.ext import CallbackContext
 
 # ------- CONFIG -------
 REQUIRED_CHANNELS = ["@Tepthon", "@TepthonHelp"]
@@ -76,16 +77,16 @@ def search_items(user_id, q=None, limit=20):
 
 def must_subscribed(func):
     @wraps(func)
-    def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user = update.effective_user
         if user is None:
-            return func(update, context, *args, **kwargs)
+            return await func(update, context, *args, **kwargs)
         user_id = user.id
         bot: Bot = context.bot
         not_member = []
         for ch in REQUIRED_CHANNELS:
             try:
-                member = bot.get_chat_member(ch, user_id)
+                member = await bot.get_chat_member(ch, user_id)
                 if member.status in ('left', 'kicked'):
                     not_member.append(ch)
             except Exception as e:
@@ -95,17 +96,17 @@ def must_subscribed(func):
             keyboard = [[InlineKeyboardButton("اشترك هنا " + ch, url=f"https://t.me/{ch.lstrip('@')}") for ch in not_member]]
             keyboard.append([InlineKeyboardButton("تحقق الآن", callback_data="verify")])
             if update.effective_message:
-                update.effective_message.reply_text(
+                await update.effective_message.reply_text(
                     "قبل ما تقدر تستخدم البوت لازم تشترك في القنوات التالية:",
                     reply_markup=InlineKeyboardMarkup(keyboard)
                 )
             return
-        return func(update, context, *args, **kwargs)
+        return await func(update, context, *args, **kwargs)
     return wrapper
 
 # ------- Helper to process a message (forwarded or replied) -------
 
-def process_message(msg, context: CallbackContext):
+async def process_message(msg, context: ContextTypes.DEFAULT_TYPE):
     if msg is None:
         return
     user = msg.from_user
@@ -137,31 +138,31 @@ def process_message(msg, context: CallbackContext):
         ftype = 'text'
     else:
         if getattr(msg, 'reply_text', None):
-            msg.reply_text('نوع المحتوى غير مدعوم للحفظ.')
+            await msg.reply_text('نوع المحتوى غير مدعوم للحفظ.')
         return
 
     if ftype == 'text':
         save_item(user_id, '', 'text', caption)
-        msg.reply_text('تم حفظ النص 📝')
+        await msg.reply_text('تم حفظ النص 📝')
         return
 
     sid = save_item(user_id, file_id, ftype, caption)
-    msg.reply_text('تم الحفظ بنجاح — رقم المرجع: #' + str(sid))
+    await msg.reply_text('تم الحفظ بنجاح — رقم المرجع: #' + str(sid))
 
 # ------- Handlers -------
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     name = user.first_name if user and getattr(user, 'first_name', None) else 'صديق'
     text = f"- اهلا {name}\nانا بوت حفظ المحتوى — ابعث المحتوى دلوقتي 🖤"
     keyboard = [[InlineKeyboardButton("أنضم اولا 💌", callback_data='verify')]]
     if update.message:
-        update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     elif update.effective_message:
-        update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-def verify_cmd(update: Update, context: CallbackContext):
+async def verify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if user is None:
         return
@@ -170,7 +171,7 @@ def verify_cmd(update: Update, context: CallbackContext):
     not_member = []
     for ch in REQUIRED_CHANNELS:
         try:
-            member = bot.get_chat_member(ch, user_id)
+            member = await bot.get_chat_member(ch, user_id)
             if member.status in ('left', 'kicked'):
                 not_member.append(ch)
         except Exception as e:
@@ -180,44 +181,44 @@ def verify_cmd(update: Update, context: CallbackContext):
         kb = [[InlineKeyboardButton("اشترك هنا " + ch, url=f"https://t.me/{ch.lstrip('@')}") for ch in not_member]]
         kb.append([InlineKeyboardButton("تحقق مرة اخرى", callback_data='verify')])
         if update.effective_message:
-            update.effective_message.reply_text("لسه باين إنك مش مشترك في:")
-            update.effective_message.reply_text('\n'.join(not_member), reply_markup=InlineKeyboardMarkup(kb))
+            await update.effective_message.reply_text("لسه باين إنك مش مشترك في:")
+            await update.effective_message.reply_text('\n'.join(not_member), reply_markup=InlineKeyboardMarkup(kb))
     else:
         if update.effective_message:
-            update.effective_message.reply_text("تمام! تم التحقق — تقدر الآن تستخدم البوت 🖤.")
+            await update.effective_message.reply_text("تمام! تم التحقق — تقدر الآن تستخدم البوت 🖤.")
 
 
-def callback_query_handler(update: Update, context: CallbackContext):
+async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if not query:
         return
     if query.data == 'verify':
         try:
-            query.answer()
+            await query.answer()
         except Exception:
             pass
-        verify_cmd(update, context)
+        await verify_cmd(update, context)
 
 
 @must_subscribed
-def save_forwarded(update: Update, context: CallbackContext):
+async def save_forwarded(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # هذا الهاندلر يتعامل مع أي رسالة عادية (مع تطبيق فحص الاشتراك بواسطة الديكوريتر)
     msg = update.message
-    process_message(msg, context)
+    await process_message(msg, context)
 
 
 @must_subscribed
-def save_command(update: Update, context: CallbackContext):
+async def save_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # حفظ عبر /save عند الرد على رسالة
     if not update.message or not update.message.reply_to_message:
         if update.message:
-            update.message.reply_text('رد على رسالة بها محتوى ثم اكتب /save')
+            await update.message.reply_text('رد على رسالة بها محتوى ثم اكتب /save')
         return
     # نستخدم نفس لوجيك الحفظ لكن على الرسالة المردودة
-    process_message(update.message.reply_to_message, context)
+    await process_message(update.message.reply_to_message, context)
 
 
-def inline_query(update: Update, context: CallbackContext):
+async def inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.inline_query
     if not query:
         return
@@ -227,7 +228,7 @@ def inline_query(update: Update, context: CallbackContext):
     bot = context.bot
     for ch in REQUIRED_CHANNELS:
         try:
-            member = bot.get_chat_member(ch, user_id)
+            member = await bot.get_chat_member(ch, user_id)
             if member.status in ('left', 'kicked'):
                 r = InlineQueryResultArticle(
                     id='not_subscribed',
@@ -236,7 +237,7 @@ def inline_query(update: Update, context: CallbackContext):
                         'رجاءً اشترك في القنوات المطلوبة ثم جرب مرة أخرى.'
                     )
                 )
-                query.answer([r], cache_time=10)
+                await query.answer([r], cache_time=10)
                 return
         except Exception:
             r = InlineQueryResultArticle(
@@ -246,7 +247,7 @@ def inline_query(update: Update, context: CallbackContext):
                     'رجاءً اشترك في القنوات المطلوبة ثم جرب مرة أخرى.'
                 )
             )
-            query.answer([r], cache_time=10)
+            await query.answer([r], cache_time=10)
             return
 
     items = search_items(user_id, q=q, limit=20)
@@ -273,38 +274,37 @@ def inline_query(update: Update, context: CallbackContext):
     if not results:
         results = [InlineQueryResultArticle(id='empty', title='لا يوجد محتوى محفوظ', input_message_content=InputTextMessageContent('مافيش حاجه محفوظة لغاية دلوقتي.'))]
 
-    query.answer(results, cache_time=5)
+    await query.answer(results, cache_time=5)
 
 
-def error_handler(update: object, context: CallbackContext):
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
 
 def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
+    # استخدام Application بدلاً من Updater في الإصدار 20.x
+    application = Application.builder().token(BOT_TOKEN).build()
 
-    dp.add_handler(CommandHandler('start', start))
-    dp.add_handler(CommandHandler('verify', verify_cmd))
-    dp.add_handler(CommandHandler('save', save_command))
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CommandHandler('verify', verify_cmd))
+    application.add_handler(CommandHandler('save', save_command))
 
-    dp.add_handler(InlineQueryHandler(inline_query))
+    application.add_handler(InlineQueryHandler(inline_query))
 
-    dp.add_handler(MessageHandler(
-        Filters.forwarded | Filters.photo | Filters.document |
-        Filters.video | Filters.audio | Filters.voice | Filters.text,
+    application.add_handler(MessageHandler(
+        filters.FORWARDED | filters.PHOTO | filters.Document.ALL |
+        filters.VIDEO | filters.AUDIO | filters.VOICE | filters.TEXT,
         save_forwarded
     ))
 
-    dp.add_handler(CallbackQueryHandler(callback_query_handler))
+    application.add_handler(CallbackQueryHandler(callback_query_handler))
 
-    dp.add_handler(MessageHandler(Filters.command, lambda u, c: u.message.reply_text('غير معروف')))
+    application.add_handler(MessageHandler(filters.COMMAND, lambda u, c: u.message.reply_text('غير معروف')))
 
-    dp.add_error_handler(error_handler)
+    application.add_error_handler(error_handler)
 
     logger.info('Starting bot...')
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 
 if __name__ == '__main__':
