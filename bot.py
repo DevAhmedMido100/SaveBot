@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-بوت تلغرام لحفظ المحتوى (دعم حفظ ملفات/صور/نصوص) + تحقق اشتراك إجباري بقناتين
-مطلوب: تعيين المتغير البيئي BOT_TOKEN فقط على Render لتشغيل البوت.
-
-مكتوب باستخدام python-telegram-bot v13 (synchronous). قاعدة بيانات sqlite محلية.
+بوت تلغرام لحفظ المحتوى - الإصدار النهائي
 """
 import os
 import logging
@@ -20,7 +17,6 @@ from telegram.ext import (Updater, CommandHandler, MessageHandler, Filters,
 
 # ------- CONFIG -------
 REQUIRED_CHANNELS = ["@Tepthon", "@TepthonHelp"]
-# استخدام مسار مطلق للداتابيز علشان Render
 DB_PATH = os.path.join(os.getcwd(), "saves.db")
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
@@ -32,7 +28,6 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ------- Database helpers -------
-
 def init_db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     cur = conn.cursor()
@@ -53,14 +48,12 @@ def init_db():
 
 DB = init_db()
 
-
 def save_item(user_id, file_id, file_type, caption=None):
     cur = DB.cursor()
     cur.execute("INSERT INTO saves (user_id, file_id, file_type, caption, created_at) VALUES (?, ?, ?, ?, ?)",
                 (user_id, file_id, file_type, caption or '', datetime.utcnow().isoformat()))
     DB.commit()
     return cur.lastrowid
-
 
 def search_items(user_id, q=None, limit=20):
     cur = DB.cursor()
@@ -73,7 +66,6 @@ def search_items(user_id, q=None, limit=20):
     return cur.fetchall()
 
 # ------- Subscription check decorator -------
-
 def must_subscribed(func):
     @wraps(func)
     def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
@@ -103,8 +95,7 @@ def must_subscribed(func):
         return func(update, context, *args, **kwargs)
     return wrapper
 
-# ------- Helper to process a message (forwarded or replied) -------
-
+# ------- Helper to process a message -------
 def process_message(msg, context: CallbackContext):
     if msg is None:
         return
@@ -112,7 +103,7 @@ def process_message(msg, context: CallbackContext):
     if user is None:
         return
     user_id = user.id
-    # determine type
+    
     file_id = None
     ftype = None
     caption = msg.caption if getattr(msg, 'caption', None) else (msg.text if getattr(msg, 'text', None) else '')
@@ -149,7 +140,6 @@ def process_message(msg, context: CallbackContext):
     msg.reply_text('تم الحفظ بنجاح — رقم المرجع: #' + str(sid))
 
 # ------- Handlers -------
-
 def start(update: Update, context: CallbackContext):
     user = update.effective_user
     name = user.first_name if user and getattr(user, 'first_name', None) else 'صديق'
@@ -159,7 +149,6 @@ def start(update: Update, context: CallbackContext):
         update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     elif update.effective_message:
         update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
-
 
 def verify_cmd(update: Update, context: CallbackContext):
     user = update.effective_user
@@ -186,7 +175,6 @@ def verify_cmd(update: Update, context: CallbackContext):
         if update.effective_message:
             update.effective_message.reply_text("تمام! تم التحقق — تقدر الآن تستخدم البوت 🖤.")
 
-
 def callback_query_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     if not query:
@@ -198,24 +186,18 @@ def callback_query_handler(update: Update, context: CallbackContext):
             pass
         verify_cmd(update, context)
 
-
 @must_subscribed
 def save_forwarded(update: Update, context: CallbackContext):
-    # هذا الهاندلر يتعامل مع أي رسالة عادية (مع تطبيق فحص الاشتراك بواسطة الديكوريتر)
     msg = update.message
     process_message(msg, context)
 
-
 @must_subscribed
 def save_command(update: Update, context: CallbackContext):
-    # حفظ عبر /save عند الرد على رسالة
     if not update.message or not update.message.reply_to_message:
         if update.message:
             update.message.reply_text('رد على رسالة بها محتوى ثم اكتب /save')
         return
-    # نستخدم نفس لوجيك الحفظ لكن على الرسالة المردودة
     process_message(update.message.reply_to_message, context)
-
 
 def inline_query(update: Update, context: CallbackContext):
     query = update.inline_query
@@ -275,10 +257,8 @@ def inline_query(update: Update, context: CallbackContext):
 
     query.answer(results, cache_time=5)
 
-
 def error_handler(update: object, context: CallbackContext):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
-
 
 def main():
     updater = Updater(BOT_TOKEN, use_context=True)
@@ -287,25 +267,19 @@ def main():
     dp.add_handler(CommandHandler('start', start))
     dp.add_handler(CommandHandler('verify', verify_cmd))
     dp.add_handler(CommandHandler('save', save_command))
-
     dp.add_handler(InlineQueryHandler(inline_query))
-
     dp.add_handler(MessageHandler(
         Filters.forwarded | Filters.photo | Filters.document |
         Filters.video | Filters.audio | Filters.voice | Filters.text,
         save_forwarded
     ))
-
     dp.add_handler(CallbackQueryHandler(callback_query_handler))
-
     dp.add_handler(MessageHandler(Filters.command, lambda u, c: u.message.reply_text('غير معروف')))
-
     dp.add_error_handler(error_handler)
 
     logger.info('Starting bot...')
     updater.start_polling()
     updater.idle()
-
 
 if __name__ == '__main__':
     main()
